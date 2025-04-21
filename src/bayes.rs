@@ -1,6 +1,13 @@
 use serde::{de::Error, Deserialize, Serialize};
 use std::{collections::HashMap, io::Read, vec};
 
+/// Base trait for all Naïve Bayes classifiers
+pub trait NaiveBayesClassifier {
+    fn fit(&mut self, tokens: &[usize], label: usize);
+    fn predict(&self, tokens: &[usize]) -> usize;
+    fn predict_probas(&self, tokens: &[usize]) -> Box<[f64]>;
+}
+
 /// A Naive Bayes classifier using binary features (presence or absence of a specific word).
 #[derive(Serialize, Deserialize)]
 pub struct BernouliNB {
@@ -25,8 +32,25 @@ impl BernouliNB {
         }
     }
 
+    /// Loads a tokenizer from a file.
+    pub fn load_from_file(file: &mut dyn Read) -> Result<Self, serde_json::Error> {
+        let mut buffer = String::new();
+        file.read_to_string(&mut buffer)
+            .map_err(serde_json::Error::custom)?;
+        serde_json::from_str(&buffer)
+    }
+
+    /// Saves a tokenizer to a file.
+    pub fn save_to_file(&self, file: &mut dyn std::io::Write) -> Result<(), serde_json::Error> {
+        let serialized = serde_json::to_string(self)?;
+        file.write_all(serialized.as_bytes())
+            .map_err(serde_json::Error::custom)
+    }
+}
+
+impl NaiveBayesClassifier for BernouliNB {
     /// Fits the classifier on the specified tokenized text.
-    pub fn fit(&mut self, tokens: &[usize], label: usize) {
+    fn fit(&mut self, tokens: &[usize], label: usize) {
         assert!(label < self.target_counts.len());
 
         for &token in tokens {
@@ -38,7 +62,7 @@ impl BernouliNB {
     }
 
     /// Predicts the target label for the sparse tokenized text
-    pub fn predict(&self, tokens: &[usize]) -> usize {
+    fn predict(&self, tokens: &[usize]) -> usize {
         self.predict_probas(tokens)
             .iter()
             .enumerate()
@@ -48,7 +72,7 @@ impl BernouliNB {
     }
 
     /// Returns the target label probabilities for the sparse tokenized text
-    pub fn predict_probas(&self, tokens: &[usize]) -> Box<[f64]> {
+    fn predict_probas(&self, tokens: &[usize]) -> Box<[f64]> {
         self.target_counts
             .iter()
             .enumerate()
@@ -66,21 +90,6 @@ impl BernouliNB {
             })
             .collect::<Vec<f64>>()
             .into_boxed_slice()
-    }
-
-    /// Loads a tokenizer from a file.
-    pub fn load_from_file(file: &mut dyn Read) -> Result<Self, serde_json::Error> {
-        let mut buffer = String::new();
-        file.read_to_string(&mut buffer)
-            .map_err(serde_json::Error::custom)?;
-        serde_json::from_str(&buffer)
-    }
-
-    /// Saves a tokenizer to a file.
-    pub fn save_to_file(&self, file: &mut dyn std::io::Write) -> Result<(), serde_json::Error> {
-        let serialized = serde_json::to_string(self)?;
-        file.write_all(serialized.as_bytes())
-            .map_err(serde_json::Error::custom)
     }
 }
 
@@ -110,9 +119,11 @@ impl MultinomialNB {
             laplace_factor: laplace_smoothing,
         }
     }
+}
 
+impl NaiveBayesClassifier for MultinomialNB {
     /// Predicts the target label for the tokenized text
-    pub fn predict(&self, tokens: &[usize]) -> usize {
+    fn predict(&self, tokens: &[usize]) -> usize {
         self.predict_probas(tokens)
             .iter()
             .enumerate()
@@ -122,7 +133,7 @@ impl MultinomialNB {
     }
 
     /// Fits the classifier on the specified tokenized text.
-    pub fn fit(&mut self, tokens: &[usize], target: usize) {
+    fn fit(&mut self, tokens: &[usize], target: usize) {
         assert!(target < self.target_counts.len());
         tokens
             .iter()
@@ -142,7 +153,7 @@ impl MultinomialNB {
     }
 
     /// Returns the target label probabilities for the tokenized text
-    pub fn predict_probas(&self, tokens: &[usize]) -> Box<[f64]> {
+    fn predict_probas(&self, tokens: &[usize]) -> Box<[f64]> {
         let token_map = tokens.iter().copied().fold(HashMap::new(), |mut map, val| {
             map.entry(val).and_modify(|frq| *frq += 1).or_insert(1usize);
             map

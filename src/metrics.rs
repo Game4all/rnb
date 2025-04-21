@@ -2,10 +2,16 @@
 pub struct ConfusionMatrix(Box<[Box<[usize]>]>);
 
 impl ConfusionMatrix {
-    pub fn accuracy(self) -> f64 {
+    pub fn accuracy(&self) -> f64 {
         let total_correct: usize = self.0.iter().enumerate().map(|(i, row)| row[i]).sum();
         let total_samples: usize = self.0.iter().flatten().sum();
         total_correct as f64 / total_samples as f64
+    }
+
+    pub fn recall(&self, class: usize) -> f64 {
+        let true_positive = self.0[class][class];
+        let total_actual_positive: usize = self.0[class].iter().sum();
+        true_positive as f64 / total_actual_positive as f64
     }
 }
 
